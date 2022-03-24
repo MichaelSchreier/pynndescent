@@ -3,6 +3,7 @@
 # License: BSD 3 clause
 import numpy as np
 import numba
+from pynndescent.utils import fastmath_isnan
 
 from pynndescent.optimal_transport import (
     allocate_graph_structures,
@@ -429,6 +430,64 @@ def alternative_cosine(x, y):
         result += x[i] * y[i]
         norm_x += x[i] * x[i]
         norm_y += y[i] * y[i]
+
+    if norm_x == 0.0 and norm_y == 0.0:
+        return 0.0
+    elif norm_x == 0.0 or norm_y == 0.0:
+        return FLOAT32_MAX
+    elif result <= 0.0:
+        return FLOAT32_MAX
+    else:
+        result = np.sqrt(norm_x * norm_y) / result
+        return np.log2(result)
+
+
+@numba.njit(fastmath=True)
+def nan_cosine(x, y):
+    result = 0.0
+    norm_x = 0.0
+    norm_y = 0.0
+    for i in range(x.shape[0]):
+        if not fastmath_isnan(x[i]) and not fastmath_isnan(y[i]):
+            result += x[i] * y[i]
+            norm_x += x[i] ** 2
+            norm_y += y[i] ** 2
+
+    if norm_x == 0.0 and norm_y == 0.0:
+        return 0.0
+    elif norm_x == 0.0 or norm_y == 0.0:
+        return 1.0
+    else:
+        return 1.0 - (result / np.sqrt(norm_x * norm_y))
+
+
+@numba.njit(
+    [
+        "f4(f4[::1],f4[::1])",
+        numba.types.float32(
+            numba.types.Array(numba.types.float32, 1, "C", readonly=True),
+            numba.types.Array(numba.types.float32, 1, "C", readonly=True),
+        ),
+    ],
+    fastmath=True,
+    locals={
+        "result": numba.types.float32,
+        "norm_x": numba.types.float32,
+        "norm_y": numba.types.float32,
+        "dim": numba.types.intp,
+        "i": numba.types.uint16,
+    },
+)
+def alternative_nan_cosine(x, y):
+    result = 0.0
+    norm_x = 0.0
+    norm_y = 0.0
+    dim = x.shape[0]
+    for i in range(dim):
+        if not fastmath_isnan(x[i]) and not fastmath_isnan(y[i]):
+            result += x[i] * y[i]
+            norm_x += x[i] ** 2
+            norm_y += y[i] ** 2
 
     if norm_x == 0.0 and norm_y == 0.0:
         return 0.0
@@ -917,6 +976,7 @@ named_distances = {
     # Other distances
     "canberra": canberra,
     "cosine": cosine,
+    "nan_cosine": nan_cosine,
     "dot": dot,
     "correlation": correlation,
     "haversine": haversine,
@@ -963,6 +1023,7 @@ fast_distance_alternatives = {
     "euclidean": {"dist": squared_euclidean, "correction": np.sqrt},
     "l2": {"dist": squared_euclidean, "correction": np.sqrt},
     "cosine": {"dist": alternative_cosine, "correction": correct_alternative_cosine},
+    "nan_cosine": {"dist": alternative_nan_cosine, "correction": correct_alternative_cosine},
     "dot": {"dist": alternative_dot, "correction": correct_alternative_cosine},
     "true_angular": {
         "dist": alternative_cosine,

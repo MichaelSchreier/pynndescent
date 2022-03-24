@@ -7,7 +7,7 @@ import locale
 import numpy as np
 import numba
 
-from pynndescent.utils import norm, tau_rand
+from pynndescent.utils import norm, tau_rand, patch_nans
 from pynndescent.distances import (
     kantorovich,
     jensen_shannon_divergence,
@@ -666,6 +666,58 @@ def sparse_correct_alternative_cosine(d):
 
 
 @numba.njit()
+def sparse_nan_cosine(ind1, data1, ind2, data2):
+    data1, data2 = patch_nans(data1, data2)
+    _, aux_data = sparse_mul(ind1, data1, ind2, data2)
+    result = 0.0
+    norm1 = norm(data1)
+    norm2 = norm(data2)
+
+    for val in aux_data:
+        result += val
+
+    if norm1 == 0.0 and norm2 == 0.0:
+        return 0.0
+    elif norm1 == 0.0 or norm2 == 0.0:
+        return 1.0
+    else:
+        return 1.0 - (result / (norm1 * norm2))
+
+
+@numba.njit(
+    #    "f4(i4[::1],f4[::1],i4[::1],f4[::1])",
+    fastmath=True,
+    locals={
+        "result": numba.types.float32,
+        "norm_x": numba.types.float32,
+        "norm_y": numba.types.float32,
+        "dim": numba.types.intp,
+        "i": numba.types.uint16,
+        "_data1": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+        "_data2": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+    },
+)
+def sparse_alternative_nan_cosine(ind1, data1, ind2, data2):
+    _data1, _data2 = patch_nans(data1, data2)
+    _, aux_data = sparse_mul(ind1, _data1, ind2, _data2)
+    result = 0.0
+    norm_x = norm(_data1)
+    norm_y = norm(_data2)
+    dim = len(aux_data)
+    for i in range(dim):
+        result += aux_data[i]
+    if norm_x == 0.0 and norm_y == 0.0:
+        return 0.0
+    elif norm_x == 0.0 or norm_y == 0.0:
+        return FLOAT32_MAX
+    elif result <= 0.0:
+        return FLOAT32_MAX
+    else:
+        result = (norm_x * norm_y) / result
+        return np.log2(result)
+
+
+@numba.njit()
 def sparse_dot(ind1, data1, ind2, data2):
     result = sparse_dot_product(ind1, data1, ind2, data2)
 
@@ -1076,6 +1128,7 @@ sparse_named_distances = {
     "sokalsneath": sparse_sokal_sneath,
     # Angular distances
     "cosine": sparse_cosine,
+    "nan_cosine": sparse_nan_cosine,
     "correlation": sparse_correlation,
     # Distribution distances
     "kantorovich": sparse_kantorovich,
@@ -1114,6 +1167,10 @@ sparse_fast_distance_alternatives = {
     "l2": {"dist": sparse_squared_euclidean, "correction": np.sqrt},
     "cosine": {
         "dist": sparse_alternative_cosine,
+        "correction": sparse_correct_alternative_cosine,
+    },
+    "nan_cosine": {
+        "dist": sparse_alternative_nan_cosine,
         "correction": sparse_correct_alternative_cosine,
     },
     "dot": {

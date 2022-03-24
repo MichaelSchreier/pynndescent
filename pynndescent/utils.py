@@ -2,6 +2,7 @@
 #
 # License: BSD 2 clause
 
+import sys
 import time
 
 import numba
@@ -60,6 +61,60 @@ def tau_rand(state):
 
 
 @numba.njit(
+    numba.types.boolean(numba.types.float32),
+    cache=True,
+    fastmath=True
+)
+def fastmath_isnan(value):
+    """
+    In fastmath mode np.isnan can't be used to detect nan values:
+    https://github.com/numba/numba/issues/2919. However, a check against sys.maxsize
+    can be utilized instead.
+    """
+    if int(value) + 1 == -sys.maxsize:
+        return True
+    return False
+
+
+@numba.njit(
+    [
+        numba.types.Tuple(
+            (
+                numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+                numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+            )
+        )(
+            numba.types.Array(numba.types.float32, 1, "C", readonly=True),
+            numba.types.Array(numba.types.float32, 1, "C", readonly=True),
+        )
+    ],
+    fastmath=True,
+    locals={
+        "_array1": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+        "_array2": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+    },
+    cache=True,
+)
+def patch_nans(array1, array2):
+    """
+    Replaces instances of nan in either array1 or array2 at position i with 0 in
+    both array1 and array2. This allows many distance functions to work without
+    any other modifications.
+    """
+    _array1 = np.zeros(len(array1), dtype=np.float32)
+    _array2 = np.zeros(len(array1), dtype=np.float32)
+
+    for i in range(len(array1)):
+        if fastmath_isnan(array1[i]) or fastmath_isnan(array2[i]):
+            continue
+        else:
+            _array1[i] = array1[i]
+            _array2[i] = array2[i]
+
+    return _array1, _array2
+
+
+@numba.njit(
     [
         "f4(f4[::1])",
         numba.types.float32(
@@ -88,7 +143,7 @@ def norm(vec):
     result = 0.0
     dim = vec.shape[0]
     for i in range(dim):
-        result += vec[i] * vec[i]
+        result += vec[i] * vec[i] if not fastmath_isnan(vec[i]) else 0
     return np.sqrt(result)
 
 

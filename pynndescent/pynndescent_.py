@@ -643,6 +643,11 @@ class NNDescent:
 
     verbose: bool (optional, default=False)
         Whether to print status graph_data during the computation.
+
+    allow_nan: bool (optional, default=False)
+        Whether input arrays may contain ``nan`` values. Note that when using such
+        arrays the selected ``metric`` must also support handling ``nan`` values for
+        sensible results.
     """
 
     def __init__(
@@ -667,6 +672,7 @@ class NNDescent:
         compressed=False,
         parallel_batch_queries=False,
         verbose=False,
+        allow_nan=False
     ):
 
         if n_trees is None:
@@ -698,7 +704,11 @@ class NNDescent:
         else:
             copy_on_normalize = False
 
-        data = check_array(data, dtype=np.float32, accept_sparse="csr", order="C")
+        force_all_finite = True
+        if allow_nan:
+            force_all_finite = "allow-nan"
+
+        data = check_array(data, dtype=np.float32, accept_sparse="csr", order="C", force_all_finite=force_all_finite)
         self._raw_data = data
 
         if not tree_init or n_trees == 0 or init_graph is not None:
