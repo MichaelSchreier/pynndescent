@@ -704,11 +704,17 @@ class NNDescent:
         else:
             copy_on_normalize = False
 
-        force_all_finite = True
+        self._force_all_finite = True
         if allow_nan:
-            force_all_finite = "allow-nan"
+            self._force_all_finite = "allow-nan"
 
-        data = check_array(data, dtype=np.float32, accept_sparse="csr", order="C", force_all_finite=force_all_finite)
+        data = check_array(
+            data,
+            dtype=np.float32,
+            accept_sparse="csr",
+            order="C",
+            force_all_finite=self._force_all_finite
+        )
         self._raw_data = data
 
         if not tree_init or n_trees == 0 or init_graph is not None:
@@ -1627,7 +1633,12 @@ class NNDescent:
             if not hasattr(self, "_search_function"):
                 self._init_sparse_search_function()
 
-            query_data = check_array(query_data, accept_sparse="csr", dtype=np.float32)
+            query_data = check_array(
+                query_data,
+                accept_sparse="csr",
+                dtype=np.float32,
+                force_all_finite=self._force_all_finite
+            )
             if not isspmatrix_csr(query_data):
                 query_data = csr_matrix(query_data, dtype=np.float32)
             if not query_data.has_sorted_indices:
@@ -1660,7 +1671,13 @@ class NNDescent:
         rng_state = current_random_state.randint(INT32_MIN, INT32_MAX, 3).astype(
             np.int64
         )
-        X = check_array(X, dtype=np.float32, accept_sparse="csr", order="C")
+        X = check_array(
+            X,
+            dtype=np.float32,
+            accept_sparse="csr",
+            order="C",
+            force_all_finite=self._force_all_finite
+        )
 
         original_order = np.argsort(self._vertex_order)
 

@@ -92,6 +92,9 @@ def fastmath_isnan(value):
     locals={
         "_array1": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
         "_array2": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+        "dim1": numba.types.intp,
+        "dim2": numba.types.intp,
+        "i": numba.types.uint16,
     },
     cache=True,
 )
@@ -101,14 +104,36 @@ def patch_nans(array1, array2):
     both array1 and array2. This allows many distance functions to work without
     any other modifications.
     """
-    _array1 = np.zeros(len(array1), dtype=np.float32)
-    _array2 = np.zeros(len(array1), dtype=np.float32)
+    dim1 = len(array1)
+    dim2 = len(array2)
 
-    for i in range(len(array1)):
-        if fastmath_isnan(array1[i]) or fastmath_isnan(array2[i]):
-            continue
-        else:
+    # Copying arrays eventually leads to memory errors, no matter if
+    # using np.copy or array.copy()
+    # _array1 = np.copy(array1)
+    # _array2 = np.copy(array2)
+    #
+    # for i in range(min([dim1, dim2])):
+    #     if fastmath_isnan(array1[i]) or fastmath_isnan(array2[i]):
+    #         _array1[i] = 0
+    #         _array2[i] = 0
+    # for i in range(min([dim1, dim2]), max([dim1, dim2])):
+    #     if dim1 > dim2 and fastmath_isnan(array1[i]):
+    #         _array1[i] = 0
+    #     elif fastmath_isnan(array2[i]):
+    #         _array2[i] = 0
+
+    _array1 = np.zeros(dim1, dtype=np.float32)
+    _array2 = np.zeros(dim2, dtype=np.float32)
+
+    for i in range(min([dim1, dim2])):
+        if not (fastmath_isnan(array1[i]) or fastmath_isnan(array2[i])):
             _array1[i] = array1[i]
+            _array2[i] = array2[i]
+    for i in range(min([dim1, dim2]), max([dim1, dim2])):
+        if dim1 > dim2:
+            if not fastmath_isnan(array1[i]):
+                _array1[i] = array1[i]
+        elif fastmath_isnan(array2[i]):
             _array2[i] = array2[i]
 
     return _array1, _array2
