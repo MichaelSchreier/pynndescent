@@ -1,7 +1,8 @@
 import numpy as np
 import numba
 
-from pynndescent.utils import tau_rand_int, norm
+from pynndescent.utils import tau_rand_int, norm, patch_nans
+
 
 ######################################################
 # Alternative tree approach; should be the basis
@@ -76,8 +77,10 @@ def make_angular_hyperplane(data, indices, rng_state):
     left = indices[left_index]
     right = indices[right_index]
 
-    left_norm = norm(data[left])
-    right_norm = norm(data[right])
+    left_point, right_point = patch_nans(data[left], data[right])
+
+    left_norm = norm(left_point)
+    right_norm = norm(right_point)
 
     if left_norm == 0.0:
         left_norm = 1.0
@@ -91,8 +94,8 @@ def make_angular_hyperplane(data, indices, rng_state):
     hyperplane_vector = np.empty(data.shape[1], dtype=np.float32)
 
     for d in range(data.shape[1]):
-        hyperplane_vector[d] = (data[left, d] / left_norm) - (
-            data[right, d] / right_norm
+        hyperplane_vector[d] = (left_point[d] / left_norm) - (
+            right_point[d] / right_norm
         )
 
     return hyperplane_vector, hyperplane_offset

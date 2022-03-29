@@ -9,7 +9,7 @@ import numba
 import scipy.sparse
 
 from pynndescent.sparse import sparse_mul, sparse_diff, sparse_sum, arr_intersect, sparse_dot_product
-from pynndescent.utils import tau_rand_int, norm
+from pynndescent.utils import tau_rand_int, norm, patch_nans
 import joblib
 
 from collections import namedtuple
@@ -86,8 +86,10 @@ def angular_random_projection_split(data, indices, rng_state):
     left = indices[left_index]
     right = indices[right_index]
 
-    left_norm = norm(data[left])
-    right_norm = norm(data[right])
+    left_point, right_point = patch_nans(data[left], data[right])
+
+    left_norm = norm(left_point)
+    right_norm = norm(right_point)
 
     if abs(left_norm) < EPS:
         left_norm = 1.0
@@ -100,8 +102,8 @@ def angular_random_projection_split(data, indices, rng_state):
     hyperplane_vector = np.empty(dim, dtype=np.float32)
 
     for d in range(dim):
-        hyperplane_vector[d] = (data[left, d] / left_norm) - (
-            data[right, d] / right_norm
+        hyperplane_vector[d] = (left_point[d] / left_norm) - (
+            right_point[d] / right_norm
         )
 
     hyperplane_norm = norm(hyperplane_vector)
@@ -313,6 +315,8 @@ def sparse_angular_random_projection_split(inds, indptr, data, indices, rng_stat
     left_data = data[indptr[left] : indptr[left + 1]]
     right_inds = inds[indptr[right] : indptr[right + 1]]
     right_data = data[indptr[right] : indptr[right + 1]]
+
+    left_data, right_data = patch_nans(left_data, right_data)
 
     left_norm = norm(left_data)
     right_norm = norm(right_data)

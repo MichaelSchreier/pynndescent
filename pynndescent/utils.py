@@ -168,7 +168,7 @@ def norm(vec):
     result = 0.0
     dim = vec.shape[0]
     for i in range(dim):
-        result += vec[i] * vec[i] if not fastmath_isnan(vec[i]) else 0
+        result += vec[i] * vec[i]
     return np.sqrt(result)
 
 
