@@ -92,8 +92,7 @@ def fastmath_isnan(value):
     locals={
         "_array1": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
         "_array2": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
-        "dim1": numba.types.intp,
-        "dim2": numba.types.intp,
+        "dim": numba.types.intp,
         "i": numba.types.uint16,
     },
     cache=True,
@@ -104,37 +103,96 @@ def patch_nans(array1, array2):
     both array1 and array2. This allows many distance functions to work without
     any other modifications.
     """
-    dim1 = len(array1)
-    dim2 = len(array2)
+
+    dim = array1.shape[0]
 
     # Copying arrays eventually leads to memory errors, no matter if
     # using np.copy or array.copy()
     # _array1 = np.copy(array1)
     # _array2 = np.copy(array2)
     #
-    # for i in range(min([dim1, dim2])):
+    # for i in range(array1.shape[0]):
     #     if fastmath_isnan(array1[i]) or fastmath_isnan(array2[i]):
     #         _array1[i] = 0
     #         _array2[i] = 0
-    # for i in range(min([dim1, dim2]), max([dim1, dim2])):
-    #     if dim1 > dim2 and fastmath_isnan(array1[i]):
-    #         _array1[i] = 0
-    #     elif fastmath_isnan(array2[i]):
-    #         _array2[i] = 0
+
+    _array1 = np.zeros(dim, dtype=np.float32)
+    _array2 = np.zeros(dim, dtype=np.float32)
+
+    for i in range(dim):
+        if not (fastmath_isnan(array1[i]) or fastmath_isnan(array2[i])):
+            _array1[i] = array1[i]
+            _array2[i] = array2[i]
+
+    return _array1, _array2
+
+
+@numba.njit(
+    [
+        numba.types.Tuple(
+            (
+                numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+                numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+            )
+        )(
+            numba.types.Array(numba.types.int32, 1, "C", readonly=True),
+            numba.types.Array(numba.types.float32, 1, "C", readonly=True),
+            numba.types.Array(numba.types.int32, 1, "C", readonly=True),
+            numba.types.Array(numba.types.float32, 1, "C", readonly=True),
+        )
+    ],
+    fastmath=True,
+    locals={
+        "_array1": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+        "_array2": numba.types.Array(numba.types.float32, 1, "C", readonly=False),
+        "dim1": numba.types.intp,
+        "dim2": numba.types.intp,
+        "i1": numba.types.uint16,
+        "i2": numba.types.uint16,
+    },
+    cache=True,
+)
+def sparse_patch_nans(indices1, array1, indices2, array2):
+    """
+    Replaces instances of nan in either array1 or array2 at index i with 0 in
+    both array1 and array2. This allows many distance functions to work without
+    any other modifications.
+    """
+    dim1 = array1.shape[0]
+    dim2 = array2.shape[0]
 
     _array1 = np.zeros(dim1, dtype=np.float32)
     _array2 = np.zeros(dim2, dtype=np.float32)
 
-    for i in range(min([dim1, dim2])):
-        if not (fastmath_isnan(array1[i]) or fastmath_isnan(array2[i])):
-            _array1[i] = array1[i]
-            _array2[i] = array2[i]
-    for i in range(min([dim1, dim2]), max([dim1, dim2])):
-        if dim1 > dim2:
-            if not fastmath_isnan(array1[i]):
-                _array1[i] = array1[i]
-        elif fastmath_isnan(array2[i]):
-            _array2[i] = array2[i]
+    i1 = 0
+    i2 = 0
+
+    # pass through both index lists
+    while i1 < dim1 or i2 < dim2:
+        if i1 < dim1:
+            j1 = indices1[i1]
+        else:
+            j1 = sys.maxsize
+
+        if i2 < dim2:
+            j2 = indices2[i2]
+        else:
+            j2 = sys.maxsize
+
+        if j1 == j2:
+            if not (fastmath_isnan(array1[i1]) or fastmath_isnan(array2[i2])):
+                _array1[i1] = array1[i1]
+                _array2[i2] = array2[i2]
+            i1 += 1
+            i2 += 1
+        elif j1 < j2:
+            if not fastmath_isnan(array1[i1]):
+                _array1[i1] = array1[i1]
+            i1 += 1
+        else:
+            if not fastmath_isnan(array2[i2]):
+                _array2[i2] = array2[i2]
+            i2 += 1
 
     return _array1, _array2
 

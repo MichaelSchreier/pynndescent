@@ -54,15 +54,17 @@ def make_euclidean_hyperplane(data, indices, rng_state):
     left = indices[left_index]
     right = indices[right_index]
 
+    left_point, right_point = patch_nans(data[left], data[right])
+
     # Compute the normal vector to the hyperplane (the vector between
     # the two points) and the offset from the origin
     hyperplane_offset = 0.0
     hyperplane_vector = np.empty(data.shape[1], dtype=np.float32)
 
     for d in range(data.shape[1]):
-        hyperplane_vector[d] = data[left, d] - data[right, d]
+        hyperplane_vector[d] = left_point[d] - right_point[d]
         hyperplane_offset -= (
-            hyperplane_vector[d] * (data[left, d] + data[right, d]) / 2.0
+            hyperplane_vector[d] * (left_point[d] + right_point[d]) / 2.0
         )
 
     return hyperplane_vector, hyperplane_offset

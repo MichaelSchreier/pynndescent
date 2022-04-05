@@ -7,7 +7,7 @@ import locale
 import numpy as np
 import numba
 
-from pynndescent.utils import norm, tau_rand, patch_nans
+from pynndescent.utils import norm, tau_rand, sparse_patch_nans
 from pynndescent.distances import (
     kantorovich,
     jensen_shannon_divergence,
@@ -667,7 +667,7 @@ def sparse_correct_alternative_cosine(d):
 
 @numba.njit()
 def sparse_nan_cosine(ind1, data1, ind2, data2):
-    data1, data2 = patch_nans(data1, data2)
+    data1, data2 = sparse_patch_nans(ind1, data1, ind2, data2)
     _, aux_data = sparse_mul(ind1, data1, ind2, data2)
     result = 0.0
     norm1 = norm(data1)
@@ -698,7 +698,7 @@ def sparse_nan_cosine(ind1, data1, ind2, data2):
     },
 )
 def sparse_alternative_nan_cosine(ind1, data1, ind2, data2):
-    _data1, _data2 = patch_nans(data1, data2)
+    _data1, _data2 = sparse_patch_nans(ind1, data1, ind2, data2)
     _, aux_data = sparse_mul(ind1, _data1, ind2, _data2)
     result = 0.0
     norm_x = norm(_data1)

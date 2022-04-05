@@ -9,7 +9,7 @@ import numba
 import scipy.sparse
 
 from pynndescent.sparse import sparse_mul, sparse_diff, sparse_sum, arr_intersect, sparse_dot_product
-from pynndescent.utils import tau_rand_int, norm, patch_nans
+from pynndescent.utils import tau_rand_int, norm, patch_nans, sparse_patch_nans
 import joblib
 
 from collections import namedtuple
@@ -121,8 +121,9 @@ def angular_random_projection_split(data, indices, rng_state):
     side = np.empty(indices.shape[0], np.int8)
     for i in range(indices.shape[0]):
         margin = 0.0
+        i_data, _ = patch_nans(data[indices[i]], data[indices[i]])
         for d in range(dim):
-            margin += hyperplane_vector[d] * data[indices[i], d]
+            margin += hyperplane_vector[d] * i_data[d]
 
         if abs(margin) < EPS:
             side[i] = tau_rand_int(rng_state) % 2
@@ -209,15 +210,17 @@ def euclidean_random_projection_split(data, indices, rng_state):
     left = indices[left_index]
     right = indices[right_index]
 
+    left_point, right_point = patch_nans(data[left], data[right])
+
     # Compute the normal vector to the hyperplane (the vector between
     # the two points) and the offset from the origin
     hyperplane_offset = 0.0
     hyperplane_vector = np.empty(dim, dtype=np.float32)
 
     for d in range(dim):
-        hyperplane_vector[d] = data[left, d] - data[right, d]
+        hyperplane_vector[d] = left_point[d] - right_point[d]
         hyperplane_offset -= (
-            hyperplane_vector[d] * (data[left, d] + data[right, d]) / 2.0
+            hyperplane_vector[d] * (left_point[d] + right_point[d]) / 2.0
         )
 
     # For each point compute the margin (project into normal vector, add offset)
@@ -228,8 +231,9 @@ def euclidean_random_projection_split(data, indices, rng_state):
     side = np.empty(indices.shape[0], np.int8)
     for i in range(indices.shape[0]):
         margin = hyperplane_offset
+        i_data, _ = patch_nans(data[indices[i]], data[indices[i]])
         for d in range(dim):
-            margin += hyperplane_vector[d] * data[indices[i], d]
+            margin += hyperplane_vector[d] * i_data[d]
 
         if abs(margin) < EPS:
             side[i] = abs(tau_rand_int(rng_state)) % 2
@@ -316,7 +320,7 @@ def sparse_angular_random_projection_split(inds, indptr, data, indices, rng_stat
     right_inds = inds[indptr[right] : indptr[right + 1]]
     right_data = data[indptr[right] : indptr[right + 1]]
 
-    left_data, right_data = patch_nans(left_data, right_data)
+    left_data, right_data = sparse_patch_nans(left_inds, left_data, right_inds, right_data)
 
     left_norm = norm(left_data)
     right_norm = norm(right_data)
@@ -351,7 +355,8 @@ def sparse_angular_random_projection_split(inds, indptr, data, indices, rng_stat
         margin = 0.0
 
         i_inds = inds[indptr[indices[i]] : indptr[indices[i] + 1]]
-        i_data = data[indptr[indices[i]] : indptr[indices[i] + 1]]
+        i_data = data[i_inds]
+        i_data, _ = sparse_patch_nans(i_inds, i_data, i_inds, i_data)
 
         _, mul_data = sparse_mul(hyperplane_inds, hyperplane_data, i_inds, i_data)
         for val in mul_data:
@@ -434,6 +439,8 @@ def sparse_euclidean_random_projection_split(inds, indptr, data, indices, rng_st
     right_inds = inds[indptr[right] : indptr[right + 1]]
     right_data = data[indptr[right] : indptr[right + 1]]
 
+    left_data, right_data = sparse_patch_nans(left_inds, left_data, right_inds, right_data)
+
     # Compute the normal vector to the hyperplane (the vector between
     # the two points) and the offset from the origin
     hyperplane_offset = 0.0
@@ -458,7 +465,8 @@ def sparse_euclidean_random_projection_split(inds, indptr, data, indices, rng_st
     for i in range(indices.shape[0]):
         margin = hyperplane_offset
         i_inds = inds[indptr[indices[i]] : indptr[indices[i] + 1]]
-        i_data = data[indptr[indices[i]] : indptr[indices[i] + 1]]
+        i_data = data[i_inds]
+        i_data, _ = sparse_patch_nans(i_inds, i_data, i_inds, i_data)
 
         _, mul_data = sparse_mul(hyperplane_inds, hyperplane_data, i_inds, i_data)
         for val in mul_data:

@@ -758,6 +758,7 @@ class NNDescent:
 
         if metric in (
             "cosine",
+            "nan_cosine",
             "dot",
             "correlation",
             "dice",
